@@ -4,7 +4,10 @@ import {
   Column,
   OneToMany,
   ManyToOne,
+  ManyToMany,
+  JoinTable,
   CreateDateColumn,
+  JoinColumn, // 👈 agregado para controlar nombres de FK
 } from 'typeorm';
 
 /* =========================
@@ -12,13 +15,13 @@ import {
    ========================= */
 @Entity('empresas')
 export class Empresa {
-  @PrimaryGeneratedColumn()
+  @PrimaryGeneratedColumn({ name: 'id_empresa' })
   id_empresa: number;
 
-  @Column({ unique: true })
+  @Column()
   nombre: string;
 
-  @OneToMany(() => Proyecto, proyecto => proyecto.empresa)
+  @ManyToMany(() => Proyecto, proyecto => proyecto.empresas)
   proyectos: Proyecto[];
 }
 
@@ -27,13 +30,22 @@ export class Empresa {
    ========================= */
 @Entity('proyectos')
 export class Proyecto {
-  @PrimaryGeneratedColumn()
+  @PrimaryGeneratedColumn({ name: 'id_proyecto' }) // 👈 nombre explícito
   id_proyecto: number;
 
   @Column()
   nombre_proyecto: string;
 
-  @ManyToOne(() => Empresa, empresa => empresa.proyectos, { onDelete: 'CASCADE' })
+  @ManyToMany(() => Empresa, empresa => empresa.proyectos)
+  
+  @JoinTable({
+    name: 'empresa_proyectos', // 👈 tabla intermedia
+    joinColumn: { name: 'id_proyecto', referencedColumnName: 'id_proyecto' },
+    inverseJoinColumn: { name: 'id_empresa', referencedColumnName: 'id_empresa' },
+  })
+  empresas: Empresa[];
+
+  @JoinColumn({ name: 'id_empresa' }) // 👈 fuerza el nombre de la FK
   empresa: Empresa;
 
   @OneToMany(() => Tema, tema => tema.proyecto)
@@ -48,7 +60,7 @@ export class Proyecto {
    ========================= */
 @Entity('temas')
 export class Tema {
-  @PrimaryGeneratedColumn()
+  @PrimaryGeneratedColumn({ name: 'id_tema' }) // 👈 nombre explícito
   id_tema: number;
 
   @Column()
@@ -65,6 +77,7 @@ export class Tema {
   descripcion: string;
 
   @ManyToOne(() => Proyecto, proyecto => proyecto.temas, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'id_proyecto' }) // 👈 fuerza el nombre de la FK
   proyecto: Proyecto;
 
   /*@OneToMany(() => HistorialTema, historial => historial.tema)
@@ -76,7 +89,7 @@ export class Tema {
    ========================= */
 @Entity('usuarios')
 export class Usuario {
-  @PrimaryGeneratedColumn()
+  @PrimaryGeneratedColumn({ name: 'id_usuario' }) // 👈 nombre explícito
   id_usuario: number;
 
   @Column()
@@ -103,7 +116,7 @@ export class Usuario {
    ========================= 
 @Entity('historial_tema')
 export class HistorialTema {
-  @PrimaryGeneratedColumn()
+  @PrimaryGeneratedColumn({ name: 'id_historial' }) // 👈 nombre explícito
   id_historial: number;
 
   @Column({
@@ -119,9 +132,11 @@ export class HistorialTema {
   fecha_cambio: Date;
 
   @ManyToOne(() => Tema, tema => tema.historial, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'id_tema' }) // 👈 fuerza el nombre de la FK
   tema: Tema;
 
   @ManyToOne(() => Usuario, usuario => usuario.historial, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'id_usuario' }) // 👈 fuerza el nombre de la FK
   usuario: Usuario;
 }*/
 
@@ -130,7 +145,7 @@ export class HistorialTema {
    =========================
 @Entity('registros_proyecto')
 export class RegistroProyecto {
-  @PrimaryGeneratedColumn()
+  @PrimaryGeneratedColumn({ name: 'id_registro' }) // 👈 nombre explícito
   id_registro: number;
 
   @Column()
@@ -143,8 +158,10 @@ export class RegistroProyecto {
   fecha: Date;
 
   @ManyToOne(() => Proyecto, proyecto => proyecto.registros, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'id_proyecto' }) // 👈 fuerza el nombre de la FK
   proyecto: Proyecto;
 
   @ManyToOne(() => Usuario, usuario => usuario.registros, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'id_usuario' }) // 👈 fuerza el nombre de la FK
   usuario: Usuario;
 } */
