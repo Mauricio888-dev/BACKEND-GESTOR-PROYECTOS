@@ -3,7 +3,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Empresa, Tema, Proyecto, Usuario } from './entities/project.entity';
 import 'dotenv/config';
-import {runSeed} from '../database/seeds/seed'
 
 
 @Injectable()
@@ -25,97 +24,124 @@ export class ProjectsService {
 
 
   async getEmpresas(): Promise<Empresa[]> {
-    try {
-      return await this.empresaRepo.find({ relations: ['proyectos'] });
-    } catch (error) {
-      throw new InternalServerErrorException('Error al obtener empresas');
-    }
+  try {
+    console.log('[SERVICE] getEmpresas activado');
+    const empresas = await this.empresaRepo.find({ relations: ['proyectos'] });
+    console.log('[SERVICE] getEmpresas resultado:', empresas);
+    return empresas;
+  } catch (error) {
+    console.error('[SERVICE] getEmpresas error:', error);
+    throw new InternalServerErrorException('Error al obtener empresas');
   }
+}
 
-  async getProyectosByEmpresa(id: number): Promise<Proyecto[]> {
-    try {
-      return await this.proyectoRepo.find({
-        where: { empresas: { id_empresa: id } },
-        relations: ['empresas'],
-      });
-    } catch (error) {
-      throw new InternalServerErrorException('Error al obtener proyectos por empresa');
-    }
+async getProyectosByEmpresa(id: number): Promise<Proyecto[]> {
+  try {
+    console.log('[SERVICE] getProyectosByEmpresa activado con idEmpresa:', id);
+    const proyectos = await this.proyectoRepo.find({
+      where: { empresas: { id_empresa: id } },
+      relations: ['empresas'],
+    });
+    console.log('[SERVICE] getProyectosByEmpresa resultado:', proyectos);
+    return proyectos;
+  } catch (error) {
+    console.error('[SERVICE] getProyectosByEmpresa error:', error);
+    throw new InternalServerErrorException('Error al obtener proyectos por empresa');
   }
+}
 
-  async getTemasByProyecto(id: number): Promise<Tema[]> {
-    try {
-      return await this.temaRepo.find({
-        where: { proyecto: { id_proyecto: id } },
-        relations: ['proyecto'],
-      });
-    } catch (error) {
-      throw new InternalServerErrorException('Error al obtener temas por proyecto');
-    }
+async getTemasByProyecto(id: number): Promise<Tema[]> {
+  try {
+    console.log('[SERVICE] getTemasByProyecto activado con idProyecto:', id);
+    const temas = await this.temaRepo.find({
+      where: { proyecto: { id_proyecto: id } },
+      relations: ['proyecto'],
+    });
+    console.log('[SERVICE] getTemasByProyecto resultado:', temas);
+    return temas;
+  } catch (error) {
+    console.error('[SERVICE] getTemasByProyecto error:', error);
+    throw new InternalServerErrorException('Error al obtener temas por proyecto');
   }
+}
 
-  async createEmpresa(dto: { nombreEmpresa: string }): Promise<{ success: boolean }> {
-    try {
-      const empresa = this.empresaRepo.create({ nombre: dto.nombreEmpresa });
-      await this.empresaRepo.save(empresa);
-      return { success: true };
-    } catch (error) {
-      throw new InternalServerErrorException('Error al registrar empresa');
-    }
+async createEmpresa(dto: { nombreEmpresa: string }): Promise<{ success: boolean }> {
+  try {
+    console.log('[SERVICE] createEmpresa activado con dto:', dto);
+    const empresa = this.empresaRepo.create({ nombre: dto.nombreEmpresa });
+    await this.empresaRepo.save(empresa);
+    console.log('[SERVICE] createEmpresa creada:', empresa);
+    return { success: true };
+  } catch (error) {
+    console.error('[SERVICE] createEmpresa error:', error);
+    throw new InternalServerErrorException('Error al registrar empresa');
   }
+}
 
-  async createProyecto(dto: { nombre_proyecto: string }): Promise<{ success: boolean }> {
-    try {
-      const proyecto = this.proyectoRepo.create({ nombre_proyecto: dto.nombre_proyecto });
-      await this.proyectoRepo.save(proyecto);
-      return { success: true };
-    } catch (error) {
-      throw new InternalServerErrorException('Error al crear proyecto');
-    }
+async createProyecto(dto: { nombre_proyecto: string }): Promise<{ success: boolean }> {
+  try {
+    console.log('[SERVICE] createProyecto activado con dto:', dto);
+    const proyecto = this.proyectoRepo.create({ nombre_proyecto: dto.nombre_proyecto });
+    await this.proyectoRepo.save(proyecto);
+    console.log('[SERVICE] createProyecto creado:', proyecto);
+    return { success: true };
+  } catch (error) {
+    console.error('[SERVICE] createProyecto error:', error);
+    throw new InternalServerErrorException('Error al crear proyecto');
   }
+}
 
-  async createTema(dto: { nombre_tema: string; id_proyecto: number }): Promise<{ success: boolean }> {
-    try {
-      const proyecto = await this.proyectoRepo.findOneBy({ id_proyecto: dto.id_proyecto });
-      if (!proyecto) throw new NotFoundException('Proyecto no encontrado');
+async createTema(dto: { nombre_tema: string; id_proyecto: number }): Promise<{ success: boolean }> {
+  try {
+    console.log('[SERVICE] createTema activado con dto:', dto);
+    const proyecto = await this.proyectoRepo.findOneBy({ id_proyecto: dto.id_proyecto });
+    if (!proyecto) throw new NotFoundException('Proyecto no encontrado');
 
-      const tema = this.temaRepo.create({ nombre_tema: dto.nombre_tema, proyecto });
-      await this.temaRepo.save(tema);
-      return { success: true };
-    } catch (error) {
-      throw new InternalServerErrorException('Error al crear tema');
-    }
+    const tema = this.temaRepo.create({ nombre_tema: dto.nombre_tema, proyecto });
+    await this.temaRepo.save(tema);
+    console.log('[SERVICE] createTema creado:', tema);
+    return { success: true };
+  } catch (error) {
+    console.error('[SERVICE] createTema error:', error);
+    throw new InternalServerErrorException('Error al crear tema');
   }
+}
 
-  async addProyectoToEmpresa(id_empresa: number, id_proyecto: number): Promise<{ success: boolean }> {
-    try {
-      const empresa = await this.empresaRepo.findOne({
-        where: { id_empresa },
-        relations: ['proyectos'],
-      });
-      if (!empresa) throw new NotFoundException('Empresa no encontrada');
+async addProyectoToEmpresa(id_empresa: number, id_proyecto: number): Promise<{ success: boolean }> {
+  try {
+    console.log('[SERVICE] addProyectoToEmpresa activado con idEmpresa:', id_empresa, 'idProyecto:', id_proyecto);
+    const empresa = await this.empresaRepo.findOne({
+      where: { id_empresa },
+      relations: ['proyectos'],
+    });
+    if (!empresa) throw new NotFoundException('Empresa no encontrada');
 
-      const proyecto = await this.proyectoRepo.findOneBy({ id_proyecto });
-      if (!proyecto) throw new NotFoundException('Proyecto no encontrado');
+    const proyecto = await this.proyectoRepo.findOneBy({ id_proyecto });
+    if (!proyecto) throw new NotFoundException('Proyecto no encontrado');
 
-      empresa.proyectos.push(proyecto);
-      await this.empresaRepo.save(empresa);
-      return { success: true };
-    } catch (error) {
-      throw new InternalServerErrorException('Error al agregar proyecto a empresa');
-    }
+    empresa.proyectos.push(proyecto);
+    await this.empresaRepo.save(empresa);
+    console.log('[SERVICE] addProyectoToEmpresa actualizado:', empresa);
+    return { success: true };
+  } catch (error) {
+    console.error('[SERVICE] addProyectoToEmpresa error:', error);
+    throw new InternalServerErrorException('Error al agregar proyecto a empresa');
   }
+}
 
-  async updateTemaEstado(id_tema: number, dto: { estado: string }): Promise<{ success: boolean }> {
-    try {
-      const tema = await this.temaRepo.findOneBy({ id_tema });
-      if (!tema) throw new NotFoundException('Tema no encontrado');
+async updateTemaEstado(id_tema: number, dto: { estado: string }): Promise<{ success: boolean }> {
+  try {
+    console.log('[SERVICE] updateTemaEstado activado con idTema:', id_tema, 'dto:', dto);
+    const tema = await this.temaRepo.findOneBy({ id_tema });
+    if (!tema) throw new NotFoundException('Tema no encontrado');
 
-      tema.estado = dto.estado;
-      await this.temaRepo.save(tema);
-      return { success: true };
-    } catch (error) {
-      throw new InternalServerErrorException('Error al actualizar estado del tema');
-    }
+    tema.estado = dto.estado;
+    await this.temaRepo.save(tema);
+    console.log('[SERVICE] updateTemaEstado actualizado:', tema);
+    return { success: true };
+  } catch (error) {
+    console.error('[SERVICE] updateTemaEstado error:', error);
+    throw new InternalServerErrorException('Error al actualizar estado del tema');
   }
+}
 }
