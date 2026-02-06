@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, InternalServerErrorException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { Empresa, Tema, Proyecto, Usuario } from './entities/project.entity';
 import 'dotenv/config';
 
@@ -18,6 +18,8 @@ export class ProjectsService {
     @InjectRepository(Usuario)
     private readonly userrepo: Repository<Usuario>,
 
+
+     private readonly dataSource: DataSource,
   ) {
     
   }
@@ -50,6 +52,26 @@ async getProyectosByEmpresa(id: number): Promise<Proyecto[]> {
   }
 }
 
+  async getProyectoById(id: number): Promise<Proyecto> {
+    try {
+      const proyecto = await this.proyectoRepo.findOne({
+        where: { id_proyecto: id },
+        relations: ['temas', 'empresas'], // opcional
+      });
+
+      if (!proyecto) {
+        throw new NotFoundException(`Proyecto con ID ${id} no encontrado`);
+      }
+
+      return proyecto;
+    } catch (error) {
+      console.error('Error al consultar proyecto:', error);
+      throw new InternalServerErrorException('Error interno al consultar proyecto');
+    }
+  }
+
+
+
 async getTemasByProyecto(id: number): Promise<Tema[]> {
   try {
     console.log('[SERVICE] getTemasByProyecto activado con idProyecto:', id);
@@ -78,13 +100,13 @@ async createEmpresa(dto: { nombreEmpresa: string }): Promise<{ success: boolean 
   }
 }
 
-async createProyecto(dto: { nombre_proyecto: string }): Promise<{ success: boolean }> {
+async createProyecto(dto: { nombre_proyecto: string }): Promise<{ success: boolean, id_proyecto: number}> {
   try {
     console.log('[SERVICE] createProyecto activado con dto:', dto);
     const proyecto = this.proyectoRepo.create({ nombre_proyecto: dto.nombre_proyecto });
     await this.proyectoRepo.save(proyecto);
     console.log('[SERVICE] createProyecto creado:', proyecto);
-    return { success: true };
+    return { success: true, id_proyecto: proyecto.id_proyecto};
   } catch (error) {
     console.error('[SERVICE] createProyecto error:', error);
     throw new InternalServerErrorException('Error al crear proyecto');
@@ -129,19 +151,31 @@ async addProyectoToEmpresa(id_empresa: number, id_proyecto: number): Promise<{ s
   }
 }
 
-async updateTemaEstado(id_tema: number, dto: { estado: string }): Promise<{ success: boolean }> {
-  try {
+  async updateTemaEstado(id_tema: number, dto: { estado: string }): Promise<{ success: boolean }> {
     console.log('[SERVICE] updateTemaEstado activado con idTema:', id_tema, 'dto:', dto);
-    const tema = await this.temaRepo.findOneBy({ id_tema });
-    if (!tema) throw new NotFoundException('Tema no encontrado');
 
-    tema.estado = dto.estado;
-    await this.temaRepo.save(tema);
-    console.log('[SERVICE] updateTemaEstado actualizado:', tema);
-    return { success: true };
-  } catch (error) {
-    console.error('[SERVICE] updateTemaEstado error:', error);
-    throw new InternalServerErrorException('Error al actualizar estado del tema');
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const tema = await queryRunner.manager.findOne(Tema, { where: { id_tema } });
+      if (!tema) throw new NotFoundException('Tema no encontrado');
+
+      tema.estado = dto.estado;
+      await queryRunner.manager.save(tema);
+
+      await queryRunner.commitTransaction(); // 👈 confirmamos la transacción
+      console.log('[SERVICE] updateTemaEstado actualizado:', tema);
+
+      return { success: true };
+    } catch (error) {
+      await queryRunner.rollbackTransaction(); // 👈 revertimos cambios si falla
+      console.error('[SERVICE] updateTemaEstado error, rollback ejecutado:', error);
+      throw new InternalServerErrorException('Error al actualizar estado del tema');
+    } finally {
+      await queryRunner.release(); // 👈 liberamos el queryRunner
+    }
   }
-}
+
 }

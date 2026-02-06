@@ -9,6 +9,7 @@ import { AppService } from './app.service';
 
 // Módulos propios
 import { ProjectsModule } from './projects/projects.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { ProjectsModule } from './projects/projects.module';
     DatabaseModule,
     ScheduleModule.forRoot(),
     ProjectsModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],

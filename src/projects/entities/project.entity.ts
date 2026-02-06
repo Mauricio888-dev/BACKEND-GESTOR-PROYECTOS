@@ -95,6 +95,9 @@ export class Usuario {
   @Column()
   nombre: string;
 
+  @Column()
+  password: string;
+
   @Column({ unique: true })
   email: string;
 
