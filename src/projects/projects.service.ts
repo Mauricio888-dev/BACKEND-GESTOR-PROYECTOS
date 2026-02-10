@@ -87,10 +87,10 @@ async getTemasByProyecto(id: number): Promise<Tema[]> {
   }
 }
 
-async createEmpresa(dto: { nombreEmpresa: string }): Promise<{ success: boolean }> {
+async createEmpresa(dto: { nombre: string }): Promise<{ success: boolean }> {
   try {
     console.log('[SERVICE] createEmpresa activado con dto:', dto);
-    const empresa = this.empresaRepo.create({ nombre: dto.nombreEmpresa });
+    const empresa = this.empresaRepo.create({ nombre: dto.nombre });
     await this.empresaRepo.save(empresa);
     console.log('[SERVICE] createEmpresa creada:', empresa);
     return { success: true };

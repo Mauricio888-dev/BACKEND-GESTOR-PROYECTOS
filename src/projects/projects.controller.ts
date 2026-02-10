@@ -38,7 +38,7 @@ export class ProjectsController {
   // Registrar empresa
   @UseGuards(JwtAuthGuard)
   @Post('registrar-empresa')
-  async postRegistrarEmpresa(@Body() dto: { nombreEmpresa: string }): Promise<{ success: boolean }> {
+  async postRegistrarEmpresa(@Body() dto: { nombre: string }): Promise<{ success: boolean }> {
     return this.projectsService.createEmpresa(dto);
   }
 

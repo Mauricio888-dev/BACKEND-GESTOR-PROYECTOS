@@ -12,12 +12,13 @@ export class AuthController {
 
   @Post('login')
   async login(@Body() dto: LoginDto) {
+    console.log("[Login]", dto)
     const token = await this.authService.login(dto);
 
     if (!token) {
       throw new UnauthorizedException('Credenciales inválidas');
     }
-
+    console.log("[login] token",token)
     return { access_token: token };
   }
   @Post('refresh')

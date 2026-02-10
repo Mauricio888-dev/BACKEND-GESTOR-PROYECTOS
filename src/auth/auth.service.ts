@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException, InternalServerErrorException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { Usuario } from '../projects/entities/project.entity'; // tu entidad Usuario
@@ -14,23 +14,51 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  async validateUser(/*email: string,*/nombre:string, password: string): Promise<Usuario | null> {
-    const user = await this.userRepo.findOne({ where: { nombre } });
-    if (user && await bcrypt.compare(password, user.password)) {
-      return user;
+async validateUser(nombre: string, password: string): Promise<Usuario | null> {
+    try {
+      console.log('[AuthService] Validando usuario:', nombre);
+
+      const user = await this.userRepo.findOne({ where: { nombre } });
+      console.log('[AuthService] Usuario encontrado:', user);
+
+
+      //if (user && await bcrypt.compare(password, user.password)) {
+      if (user && password == user.password) {
+        console.log('[AuthService] Password correcto para usuario:', nombre);
+        return user;
+      }
+
+      console.warn('[AuthService] Credenciales inválidas para usuario:', nombre);
+      return null;
+    } catch (error) {
+      console.error('[AuthService] Error en validateUser:', error);
+      throw new InternalServerErrorException('Error interno al validar usuario');
     }
-    return null;
   }
 
+
   async login(dto: LoginDto): Promise<{ access_token: string; refresh_token: string } | null> {
-  const user = await this.validateUser(/*dto.email,*/dto.nombre, dto.password);
-  if (!user) return null;
+    try {
+      console.log('[AuthService] Intentando login con DTO:', dto);
+      
+      const user = await this.validateUser(dto.nombre, dto.password);
+      if (!user) {
+        console.warn('[AuthService] Login fallido: credenciales inválidas');
+        throw new UnauthorizedException('Credenciales inválidas');
+      }
 
-  const payload = { sub: user.id_usuario, email: user.email };
+      const payload = { sub: user.id_usuario, nombre: user.nombre };
+      console.log('[AuthService] Payload JWT:', payload);
 
-  return {
-    access_token: this.jwtService.sign(payload, { expiresIn: '1h' }),   // token corto
-    refresh_token: this.jwtService.sign(payload, { expiresIn: '7d' }), // token largo
-  };
-}
+      const access_token = this.jwtService.sign(payload, { expiresIn: '1h' });
+      const refresh_token = this.jwtService.sign(payload, { expiresIn: '7d' });
+
+      console.log('[AuthService] Tokens generados correctamente');
+      return { access_token, refresh_token };
+    } catch (error) {
+      console.error('[AuthService] Error en login:', error);
+      throw new InternalServerErrorException('Error interno al iniciar sesión');
+    }
+  }
+
 }
