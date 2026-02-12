@@ -8,6 +8,9 @@ import {
   JoinTable,
   CreateDateColumn,
   JoinColumn, // 👈 agregado para controlar nombres de FK
+  Unique,
+  UpdateDateColumn,
+  PrimaryColumn
 } from 'typeorm';
 
 /* =========================
@@ -54,7 +57,27 @@ export class Proyecto {
   /*@OneToMany(() => RegistroProyecto, registro => registro.proyecto)
   registros: RegistroProyecto[];*/
 }
+/* =========================
+   EMPRESA_PROYECTO
+   ========================= */
+@Entity('empresa_proyectos')
+@Unique(['empresa', 'proyecto'])
+export class EmpresaProyecto {
+  @PrimaryColumn({ name: 'id_empresa', type: 'int' })
+  id_empresa: number;
 
+  @PrimaryColumn({ name: 'id_proyecto', type: 'int' })
+  id_proyecto: number;
+
+  // ---------- RELACIONES ----------
+  @ManyToOne(() => Empresa, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'id_empresa' })
+  empresa: Empresa;
+
+  @ManyToOne(() => Proyecto, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'id_proyecto' })
+  proyecto: Proyecto;
+}
 /* =========================
    TEMAS
    ========================= */
@@ -66,13 +89,6 @@ export class Tema {
   @Column()
   nombre_tema: string;
 
-  @Column({
-    type: 'enum',
-    enum: ['realizado', 'sin registro', 'en proceso'],
-    default: 'sin registro',
-  })
-  estado: string;
-
   @Column({ type: 'text', nullable: true })
   descripcion: string;
 
@@ -82,6 +98,50 @@ export class Tema {
 
   /*@OneToMany(() => HistorialTema, historial => historial.tema)
   historial: HistorialTema[];*/
+}
+
+@Entity('empresa_proyecto_tema')
+@Unique(['empresa', 'proyecto', 'tema'])
+export class EmpresaProyectoTema {
+
+  @PrimaryGeneratedColumn({ name: 'id' })
+  id: number;
+
+  // ---------- EMPRESA ----------
+  @ManyToOne(() => Empresa, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'empresa_id' })
+  empresa: Empresa;
+
+  // ---------- PROYECTO ----------
+  @ManyToOne(() => Proyecto, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'proyecto_id' })
+  proyecto: Proyecto;
+
+  // ---------- TEMA ----------
+  @ManyToOne(() => Tema, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'tema_id' })
+  tema: Tema;
+
+  // ---------- ESTADO ----------
+  @Column({
+    type: 'enum',
+    enum: ['realizado', 'sin registro', 'en proceso'],
+    default: 'sin registro'
+  })
+  estado: 'sin registro' | 'realizado' | 'en proceso';
+
+  // ---------- FECHAS ----------
+  @CreateDateColumn({
+    name: 'fecha_creacion',
+    type: 'timestamp'
+  })
+  fechaCreacion: Date;
+
+  @UpdateDateColumn({
+    name: 'fecha_actualizacion',
+    type: 'timestamp'
+  })
+  fechaActualizacion: Date;
 }
 
 /* =========================

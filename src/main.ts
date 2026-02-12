@@ -10,9 +10,10 @@ async function bootstrap() {
       'http://127.0.0.1:4200',
       'http://localhost:5173',
       'http://localhost:3009',
-      'http://192.168.19.176:4200',
+      'http://192.168.19.106:4200',
       'http://192.168.19.114:4200',
-      'http://192.168.19.123:4200',
+      'http://192.168.19.116:4200',
+      'https://ndlh927t-4200.use2.devtunnels.ms'
     ],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     allowedHeaders: ['Content-Type', 'Authorization', 'ngrok-skip-browser-warning'],

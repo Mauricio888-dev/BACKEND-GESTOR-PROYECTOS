@@ -21,6 +21,14 @@ export class ProjectsController {
     return this.projectsService.getProyectosByEmpresa(id);
   }
 
+  // Obtener todos los proyectos existentes
+  @UseGuards(JwtAuthGuard)
+  @Get('proyectos')
+  async getAllProyectos(): Promise<Proyecto[]> {
+    return this.projectsService.getAllProyectos();
+  }
+
+
   // Obtener un proyecto por ID
   @UseGuards(JwtAuthGuard)
   @Get('proyectos/:idProyecto')
@@ -28,11 +36,22 @@ export class ProjectsController {
     return this.projectsService.getProyectoById(id);
   }
 
-  // Obtener temas por proyecto
+
+  // Obtener temas de un proyecto sin importar empresa
   @UseGuards(JwtAuthGuard)
   @Get('proyectos/:idProyecto/temas')
-  async getTemasByProyecto(@Param('idProyecto') id: number): Promise<Tema[]> {
-    return this.projectsService.getTemasByProyecto(id);
+  async getTemasByProyecto(@Param('idProyecto') id_proyecto: number): Promise<Tema[]> {
+    return this.projectsService.getTemasByProyecto(id_proyecto);
+  }
+
+  // Obtener temas por proyecto
+  @UseGuards(JwtAuthGuard)
+  @Get('empresas/:idEmpresa/proyectos/:idProyecto/temas')
+  async getTemasByEmpresaProyecto(
+    @Param('idEmpresa') id_empresa: number,
+    @Param('idProyecto') id_proyecto: number,
+  ): Promise<any[]> {
+    return this.projectsService.getTemasByEmpresaProyecto(id_empresa, id_proyecto);
   }
 
   // Registrar empresa
@@ -67,12 +86,25 @@ export class ProjectsController {
   }
 
   // Actualizar estado de tema
+  // Actualizar estado de tema por empresa y proyecto
   @UseGuards(JwtAuthGuard)
-  @Patch('temas/:idTema')
+  @Patch('empresas/:idEmpresa/proyectos/:idProyecto/temas/:idTema')
   async patchUpdateTemaEstado(
+    @Param('idEmpresa') id_empresa: number,
+    @Param('idProyecto') id_proyecto: number,
     @Param('idTema') id_tema: number,
-    @Body() dto: { estado: string },
+    @Body() dto: { estado: 'realizado' | 'sin registro' | 'en proceso' },
   ): Promise<{ success: boolean }> {
-    return this.projectsService.updateTemaEstado(id_tema, dto);
+    return this.projectsService.updateTemaEstado(id_empresa, id_proyecto, id_tema, dto);
+  }
+    // Crear y asociar un nuevo tema a un proyecto ya unido a una empresa
+  @UseGuards(JwtAuthGuard)
+  @Post('empresas/:idEmpresa/proyectos/:idProyecto/temas')
+  async postCrearTemaEnEmpresaProyecto(
+    @Param('idEmpresa') id_empresa: number,
+    @Param('idProyecto') id_proyecto: number,
+    @Body() dto: { nombre_tema: string },
+  ): Promise<{ success: boolean }> {
+    return this.projectsService.createTemaEnEmpresaProyecto(id_empresa, id_proyecto, dto);
   }
 }
