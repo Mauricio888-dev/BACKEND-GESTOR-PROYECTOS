@@ -2,15 +2,13 @@ import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
-  OneToMany,
   ManyToOne,
+  OneToMany,
   ManyToMany,
   JoinTable,
+  JoinColumn,
   CreateDateColumn,
-  JoinColumn, // 👈 agregado para controlar nombres de FK
-  Unique,
-  UpdateDateColumn,
-  PrimaryColumn
+  Unique
 } from 'typeorm';
 
 /* =========================
@@ -18,213 +16,190 @@ import {
    ========================= */
 @Entity('empresas')
 export class Empresa {
-  @PrimaryGeneratedColumn({ name: 'id_empresa' })
+
+  @PrimaryGeneratedColumn({ name: 'id_empresa', type: 'int' })
   id_empresa: number;
 
-  @Column()
+  @Column({ type: 'varchar', length: 100 })
   nombre: string;
 
-  @ManyToMany(() => Proyecto, proyecto => proyecto.empresas)
-  proyectos: Proyecto[];
+  @OneToMany(() => EmpresaProyecto, ep => ep.empresa)
+  empresaProyectos: EmpresaProyecto[];
 }
+
 
 /* =========================
    PROYECTOS
    ========================= */
 @Entity('proyectos')
 export class Proyecto {
-  @PrimaryGeneratedColumn({ name: 'id_proyecto' }) // 👈 nombre explícito
+
+  @PrimaryGeneratedColumn({ name: 'id_proyecto', type: 'int' })
   id_proyecto: number;
 
-  @Column()
-  nombre_proyecto: string;
+  @Column({ type: 'varchar', length: 100 })
+  nombre: string;
 
-  @ManyToMany(() => Empresa, empresa => empresa.proyectos)
-  
-  @JoinTable({
-    name: 'empresa_proyectos', // 👈 tabla intermedia
-    joinColumn: { name: 'id_proyecto', referencedColumnName: 'id_proyecto' },
-    inverseJoinColumn: { name: 'id_empresa', referencedColumnName: 'id_empresa' },
-  })
-  empresas: Empresa[];
+  @OneToMany(() => EmpresaProyecto, ep => ep.proyecto)
+  empresaProyectos: EmpresaProyecto[];
 
-  @JoinColumn({ name: 'id_empresa' }) // 👈 fuerza el nombre de la FK
-  empresa: Empresa;
-
-  @OneToMany(() => Tema, tema => tema.proyecto)
-  temas: Tema[];
-
-  /*@OneToMany(() => RegistroProyecto, registro => registro.proyecto)
-  registros: RegistroProyecto[];*/
+  @OneToMany(() => Etapa, etapa => etapa.proyecto)
+  etapas: Etapa[];
 }
+
+
 /* =========================
-   EMPRESA_PROYECTO
+   EMPRESA_PROYECTOS
    ========================= */
 @Entity('empresa_proyectos')
 @Unique(['empresa', 'proyecto'])
 export class EmpresaProyecto {
-  @PrimaryColumn({ name: 'id_empresa', type: 'int' })
-  id_empresa: number;
 
-  @PrimaryColumn({ name: 'id_proyecto', type: 'int' })
-  id_proyecto: number;
+  @PrimaryGeneratedColumn({ name: 'id_em_p', type: 'int' })
+  id_em_p: number;
 
-  // ---------- RELACIONES ----------
-  @ManyToOne(() => Empresa, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Empresa, empresa => empresa.empresaProyectos, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'id_empresa' })
   empresa: Empresa;
 
-  @ManyToOne(() => Proyecto, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Proyecto, proyecto => proyecto.empresaProyectos, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'id_proyecto' })
   proyecto: Proyecto;
+
+  @OneToMany(() => Calificacion, calificacion => calificacion.empresaProyecto)
+  calificaciones: Calificacion[];
 }
+
+
+/* =========================
+   ETAPAS
+   ========================= */
+@Entity('etapas')
+export class Etapa {
+
+  @PrimaryGeneratedColumn({ name: 'id_etapa', type: 'int' })
+  id_etapa: number;
+
+  @Column({ type: 'varchar', length: 100 })
+  nombre: string;
+
+  @ManyToOne(() => Proyecto, proyecto => proyecto.etapas, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'id_proyecto' })
+  proyecto: Proyecto;
+
+  @OneToMany(() => Tema, tema => tema.etapa)
+  temas: Tema[];
+}
+
+
 /* =========================
    TEMAS
    ========================= */
 @Entity('temas')
 export class Tema {
-  @PrimaryGeneratedColumn({ name: 'id_tema' }) // 👈 nombre explícito
+
+  @PrimaryGeneratedColumn({ name: 'id_tema', type: 'int' })
   id_tema: number;
 
-  @Column()
-  nombre_tema: string;
+  @Column({ type: 'varchar', length: 100 })
+  nombre: string;
 
-  @Column({ type: 'text', nullable: true })
-  descripcion: string;
+  /*@ManyToOne(() => Proyecto, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'id_proyecto' })
+  proyecto: Proyecto;*/
 
-  @ManyToOne(() => Proyecto, proyecto => proyecto.temas, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'id_proyecto' }) // 👈 fuerza el nombre de la FK
-  proyecto: Proyecto;
+  @ManyToOne(() => Etapa, etapa => etapa.temas, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'id_etapa' })
+  etapa: Etapa;
 
-  /*@OneToMany(() => HistorialTema, historial => historial.tema)
-  historial: HistorialTema[];*/
+  @OneToMany(() => SubTema, subtema => subtema.tema)
+  subtemas: SubTema[];
+
+  @OneToMany(() => Calificacion, calificacion => calificacion.tema)
+  calificaciones: Calificacion[];
 }
 
-@Entity('empresa_proyecto_tema')
-@Unique(['empresa', 'proyecto', 'tema'])
-export class EmpresaProyectoTema {
+/* =========================
+   SUB_TEMAS
+   ========================= */
+@Entity('sub_temas')
+export class SubTema {
 
-  @PrimaryGeneratedColumn({ name: 'id' })
-  id: number;
+  @PrimaryGeneratedColumn({ name: 'id_subtema', type: 'int' })
+  id_subtema: number;
 
-  // ---------- EMPRESA ----------
-  @ManyToOne(() => Empresa, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'empresa_id' })
-  empresa: Empresa;
+  @Column({ type: 'varchar', length: 100 })
+  nombre: string;
 
-  // ---------- PROYECTO ----------
-  @ManyToOne(() => Proyecto, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'proyecto_id' })
-  proyecto: Proyecto;
-
-  // ---------- TEMA ----------
-  @ManyToOne(() => Tema, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'tema_id' })
+  @ManyToOne(() => Tema, tema => tema.subtemas, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'id_tema' })
   tema: Tema;
 
-  // ---------- ESTADO ----------
+  @OneToMany(() => Calificacion, calificacion => calificacion.subtema)
+  calificaciones: Calificacion[];
+}
+
+
+/* =========================
+   CALIFICACIONES
+   ========================= */
+@Entity('calificaciones')
+export class Calificacion {
+
+  @PrimaryGeneratedColumn({ name: 'id_calificacion', type: 'int' })
+  id_calificacion: number;
+
   @Column({
     type: 'enum',
-    enum: ['realizado', 'sin registro', 'en proceso'],
-    default: 'sin registro'
+    enum: ['done', 'pending', 'none'],
+    default: 'none'
   })
-  estado: 'sin registro' | 'realizado' | 'en proceso';
+  estado: 'done' | 'pending' | 'none';
 
-  // ---------- FECHAS ----------
   @CreateDateColumn({
-    name: 'fecha_creacion',
-    type: 'timestamp'
+    name: 'fecha',
+    type: 'timestamp',
   })
-  fechaCreacion: Date;
+  fecha: Date;
 
-  @UpdateDateColumn({
-    name: 'fecha_actualizacion',
-    type: 'timestamp'
-  })
-  fechaActualizacion: Date;
+  @ManyToOne(() => EmpresaProyecto, ep => ep.calificaciones, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'id_em_p' })
+  empresaProyecto: EmpresaProyecto;
+
+  @ManyToOne(() => Etapa, { nullable: true, onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'id_etapa' })
+  etapa: Etapa;
+
+  @ManyToOne(() => Tema, tema => tema.calificaciones, { nullable: true, onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'id_tema' })
+  tema: Tema;
+
+  @ManyToOne(() => SubTema, subtema => subtema.calificaciones, { nullable: true, onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'id_subtema' })
+  subtema: SubTema;
 }
+
 
 /* =========================
    USUARIOS
    ========================= */
 @Entity('usuarios')
 export class Usuario {
-  @PrimaryGeneratedColumn({ name: 'id_usuario' }) // 👈 nombre explícito
+  @PrimaryGeneratedColumn({ name: 'id_usuario', type: 'int' })
   id_usuario: number;
 
-  @Column()
+  @Column({ type: 'varchar', length: 100 })
   nombre: string;
 
-  @Column()
+  @Column({ type: 'varchar', length: 255 })
   password: string;
 
-  @Column({ unique: true })
+  @Column({ unique: true, type: 'varchar', length: 255 })
   email: string;
 
   @Column({
     type: 'enum',
     enum: ['admin', 'implementador', 'cliente'],
   })
-  rol: string;
-
-  /*@OneToMany(() => HistorialTema, historial => historial.usuario)
-  historial: HistorialTema[];
-
-  @OneToMany(() => RegistroProyecto, registro => registro.usuario)
-  registros: RegistroProyecto[];*/
+  rol: 'admin' | 'implementador' | 'cliente';
 }
-
-/* =========================
-   HISTORIAL_TEMA
-   ========================= 
-@Entity('historial_tema')
-export class HistorialTema {
-  @PrimaryGeneratedColumn({ name: 'id_historial' }) // 👈 nombre explícito
-  id_historial: number;
-
-  @Column({
-    type: 'enum',
-    enum: ['realizado', 'sin registro', 'en proceso'],
-  })
-  estado: string;
-
-  @Column({ type: 'text', nullable: true })
-  comentario: string;
-
-  @CreateDateColumn({ name: 'fecha_cambio' })
-  fecha_cambio: Date;
-
-  @ManyToOne(() => Tema, tema => tema.historial, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'id_tema' }) // 👈 fuerza el nombre de la FK
-  tema: Tema;
-
-  @ManyToOne(() => Usuario, usuario => usuario.historial, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'id_usuario' }) // 👈 fuerza el nombre de la FK
-  usuario: Usuario;
-}*/
-
-/* =========================
-   REGISTROS_PROYECTO
-   =========================
-@Entity('registros_proyecto')
-export class RegistroProyecto {
-  @PrimaryGeneratedColumn({ name: 'id_registro' }) // 👈 nombre explícito
-  id_registro: number;
-
-  @Column()
-  accion: string;
-
-  @Column({ type: 'text', nullable: true })
-  detalle: string;
-
-  @CreateDateColumn()
-  fecha: Date;
-
-  @ManyToOne(() => Proyecto, proyecto => proyecto.registros, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'id_proyecto' }) // 👈 fuerza el nombre de la FK
-  proyecto: Proyecto;
-
-  @ManyToOne(() => Usuario, usuario => usuario.registros, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'id_usuario' }) // 👈 fuerza el nombre de la FK
-  usuario: Usuario;
-} */

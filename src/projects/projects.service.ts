@@ -1,306 +1,584 @@
-import { Injectable, NotFoundException, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
+
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
-import { Empresa, Tema, Proyecto, Usuario, EmpresaProyectoTema, EmpresaProyecto } from './entities/project.entity';
-import 'dotenv/config';
+
+import {
+  Repository,
+  DataSource,
+  QueryRunner,
+  In,
+} from 'typeorm'
+
+import {
+  Empresa,
+  Proyecto,
+  Tema,
+  Etapa,
+  SubTema,
+  Usuario,
+  EmpresaProyecto,
+  Calificacion,
+} from './entities/project.entity';
 
 @Injectable()
 export class ProjectsService {
+  private readonly logger = new Logger(ProjectsService.name);
   constructor(
     @InjectRepository(Empresa)
     private readonly empresaRepo: Repository<Empresa>,
+
     @InjectRepository(Proyecto)
     private readonly proyectoRepo: Repository<Proyecto>,
+
+    @InjectRepository(Etapa)
+    private readonly etapaRepo: Repository<Etapa>,
+
     @InjectRepository(Tema)
     private readonly temaRepo: Repository<Tema>,
-    @InjectRepository(EmpresaProyectoTema)
-    private readonly EmpresaProyectoTemaRepo: Repository<EmpresaProyectoTema>,
+
+    @InjectRepository(SubTema)
+    private readonly SubTemaRepo: Repository<SubTema>,
+
     @InjectRepository(EmpresaProyecto)
-    private readonly EmpresaProyectorepo: Repository<EmpresaProyecto>,
+    private readonly empresaProyectoRepo: Repository<EmpresaProyecto>,
+
+    @InjectRepository(Calificacion)
+    private readonly calificacionRepo: Repository<Calificacion>,
+
     @InjectRepository(Usuario)
-    private readonly userrepo: Repository<Usuario>,
+    private readonly userRepo: Repository<Usuario>,
+
     private readonly dataSource: DataSource,
+
+
   ) {}
 
-  async getEmpresas(): Promise<Empresa[]> {
-    try {
-      console.log('[SERVICE] getEmpresas activado');
-      const empresas = await this.empresaRepo.find({ relations: ['proyectos'] });
-      console.log('[SERVICE] getEmpresas resultado:', empresas);
-      return empresas;
-    } catch (error) {
-      console.error('[SERVICE] getEmpresas error:', error);
-      throw new InternalServerErrorException('Error al obtener empresas');
-    }
+  /* =====================================================
+   EMPRESAS
+===================================================== */
+
+async getEmpresas(): Promise<any[]> {
+  const empresas = await this.empresaRepo.find({
+    relations: ['empresaProyectos', 'empresaProyectos.proyecto'],
+  });
+
+  return empresas.map(e => ({
+    id_empresa: e.id_empresa,
+    nombre: e.nombre,
+    proyectos: e.empresaProyectos.map(ep => ep.proyecto),
+  }));
+}
+
+async createEmpresa(dto: { nombre: string }) {
+  const empresa = this.empresaRepo.create(dto);
+  await this.empresaRepo.save(empresa);
+  return { success: true };
+}
+
+/* =====================================================
+   PROYECTOS
+===================================================== */
+
+async getAllProyectos(): Promise<any[]> {
+  const proyectos = await this.proyectoRepo.find({
+    relations: ['empresaProyectos', 'empresaProyectos.empresa', 'etapas'],
+  });
+
+  return proyectos.map(p => ({
+    id_proyecto: p.id_proyecto,
+    nombre: p.nombre,
+    empresas: p.empresaProyectos.map(ep => ep.empresa),
+    etapas: p.etapas,
+  }));
+}
+
+async getProyectoById(id: number): Promise<any> {
+  const proyecto = await this.proyectoRepo.findOne({
+    where: { id_proyecto: id },
+    relations: [
+      'empresaProyectos',
+      'empresaProyectos.empresa',
+      'etapas',
+      'etapas.temas',
+      'etapas.temas.subtemas',
+    ],
+  });
+
+  if (!proyecto)
+    throw new NotFoundException(`Proyecto ${id} no encontrado`);
+
+  return proyecto;
+}
+
+async createProyecto(dto: { nombre: string }) {
+  const proyecto = this.proyectoRepo.create(dto);
+  await this.proyectoRepo.save(proyecto);
+  return { success: true, id_proyecto: proyecto.id_proyecto };
+}
+
+async getProyectosByEmpresa(id_empresa: number) {
+  const empresaProyectos = await this.empresaProyectoRepo.find({
+    where: { empresa: { id_empresa } },
+    relations: ['proyecto'],
+  });
+
+  return empresaProyectos.map(ep => ep.proyecto);
+}
+
+/* =====================================================
+   RELACION EMPRESA - PROYECTO
+===================================================== */
+
+async addProyectoToEmpresa(id_empresa: number, id_proyecto: number) {
+  const empresa = await this.empresaRepo.findOne({ where: { id_empresa } });
+  if (!empresa) throw new NotFoundException('Empresa no encontrada');
+
+  const proyecto = await this.proyectoRepo.findOne({ where: { id_proyecto } });
+  if (!proyecto) throw new NotFoundException('Proyecto no encontrado');
+
+  const existe = await this.empresaProyectoRepo.findOne({
+    where: { empresa: { id_empresa }, proyecto: { id_proyecto } },
+  });
+
+  if (existe) return { success: true };
+
+  const relacion = this.empresaProyectoRepo.create({ empresa, proyecto });
+  await this.empresaProyectoRepo.save(relacion);
+
+  return { success: true };
+}
+
+/* =====================================================
+   ETAPAS
+===================================================== */
+
+async getEtapasByProyecto(
+  id_proyecto: number,
+  id_empresa: number,
+) {
+  const empresaProyecto = await this.empresaProyectoRepo.findOne({
+    where: {
+      empresa: { id_empresa },
+      proyecto: { id_proyecto },
+    },
+  });
+
+  if (!empresaProyecto)
+    throw new NotFoundException('Empresa-Proyecto no encontrado');
+
+  const etapas = await this.etapaRepo
+    .createQueryBuilder('etapa')
+    .leftJoin(
+      Calificacion,
+      'cal',
+      'cal.id_etapa = etapa.id_etapa AND cal.id_em_p = :id_em_p',
+      { id_em_p: empresaProyecto.id_em_p },
+    )
+    .where('etapa.id_proyecto = :id_proyecto', { id_proyecto })
+    .select([
+      'etapa.id_etapa',
+      'etapa.nombre',
+      'COALESCE(cal.estado, "none") as estado',
+    ])
+    .orderBy('etapa.id_etapa', 'ASC')
+    .getRawMany();
+
+  return etapas;
+}
+
+
+async createEtapa(dto: { nombre: string; id_proyecto: number }) {
+  const proyecto = await this.proyectoRepo.findOne({
+    where: { id_proyecto: dto.id_proyecto },
+  });
+
+  if (!proyecto)
+    throw new NotFoundException('Proyecto no encontrado');
+
+  const etapa = this.etapaRepo.create({
+    nombre: dto.nombre,
+    proyecto,
+  });
+
+  await this.etapaRepo.save(etapa);
+  return { success: true };
+}
+
+/* =====================================================
+   TEMAS
+===================================================== */
+
+async getTemasByEtapa(
+  id_etapa: number,
+  id_empresa: number,
+  id_proyecto: number,
+) {
+  const empresaProyecto = await this.empresaProyectoRepo.findOne({
+    where: {
+      empresa: { id_empresa },
+      proyecto: { id_proyecto },
+    },
+  });
+
+  if (!empresaProyecto)
+    throw new NotFoundException('Empresa-Proyecto no encontrado');
+
+  return this.temaRepo
+    .createQueryBuilder('tema')
+    .leftJoinAndMapOne(
+      'tema.calificacion',
+      Calificacion,
+      'cal',
+      'cal.id_tema = tema.id_tema AND cal.id_em_p = :id_em_p',
+      { id_em_p: empresaProyecto.id_em_p },
+    )
+    .where('tema.id_etapa = :id_etapa', { id_etapa })
+    .getMany();
+}
+
+
+async createTema(dto: {
+  nombre: string;
+  id_proyecto: number;
+  id_etapa: number;
+}) {
+  const etapa = await this.etapaRepo.findOne({
+    where: { id_etapa: dto.id_etapa },
+  });
+
+  if (!etapa)
+    throw new NotFoundException('Etapa no encontrada');
+
+  const tema = this.temaRepo.create({
+    nombre: dto.nombre,
+    etapa,
+  });
+
+  await this.temaRepo.save(tema);
+  return { success: true };
+}
+
+/* =====================================================
+   SUBTEMAS
+===================================================== */
+
+async getSubtemasByTema(
+  id_tema: number,
+  id_empresa: number,
+  id_proyecto: number,
+) {
+  const empresaProyecto = await this.empresaProyectoRepo.findOne({
+    where: {
+      empresa: { id_empresa },
+      proyecto: { id_proyecto },
+    },
+  });
+
+  if (!empresaProyecto)
+    throw new NotFoundException('Empresa-Proyecto no encontrado');
+
+  const subtemas = await this.SubTemaRepo
+    .createQueryBuilder('subtema')
+    .leftJoin(
+      Calificacion,
+      'cal',
+      'cal.id_subtema = subtema.id_subtema AND cal.id_em_p = :id_em_p',
+      { id_em_p: empresaProyecto.id_em_p },
+    )
+    .where('subtema.id_tema = :id_tema', { id_tema })
+    .select([
+      'subtema.id_subtema',
+      'subtema.nombre',
+      'COALESCE(cal.estado, "none") as estado',
+    ])
+    .orderBy('subtema.id_subtema', 'ASC')
+    .getRawMany();
+
+  return subtemas;
+}
+
+
+async createSubtema(dto: { nombre: string; id_tema: number }) {
+  const tema = await this.temaRepo.findOne({
+    where: { id_tema: dto.id_tema },
+  });
+
+  if (!tema)
+    throw new NotFoundException('Tema no encontrado');
+
+  const subtema = this.SubTemaRepo.create({
+    nombre: dto.nombre,
+    tema,
+  });
+
+  await this.SubTemaRepo.save(subtema);
+  return { success: true };
+}
+
+/* =====================================================
+   CALIFICACIONES - UPDATE CON TRANSACCION + CASCADA
+===================================================== */
+async updateEstadoGeneral(dto: {
+  id_empresa: number;
+  id_proyecto: number;
+  id_etapa?: number;
+  id_tema?: number;
+  id_subtema?: number;
+  estado: 'done' | 'pending' | 'none';
+}) {
+  const queryRunner = this.dataSource.createQueryRunner();
+  await queryRunner.connect();
+  await queryRunner.startTransaction();
+
+  console.log('===== INICIO updateEstadoGeneral =====');
+  console.log('DTO:', dto);
+
+  try {
+    const empresaProyecto = await queryRunner.manager.findOne(
+      EmpresaProyecto,
+      {
+        where: {
+          empresa: { id_empresa: dto.id_empresa },
+          proyecto: { id_proyecto: dto.id_proyecto },
+        },
+      },
+    );
+
+    if (!empresaProyecto)
+      throw new NotFoundException('Empresa-Proyecto no encontrado');
+
+    const id_em_p = empresaProyecto.id_em_p;
+
+    await this.upsertEstadoTx(queryRunner, id_em_p, dto);
+
+    await this.recalcularEstadosTx(
+      queryRunner,
+      id_em_p,
+      dto.id_subtema,
+      dto.id_tema,
+      dto.id_etapa,
+    );
+
+    await queryRunner.commitTransaction();
+    console.log('COMMIT OK');
+
+    return { success: true };
+  } catch (error) {
+    await queryRunner.rollbackTransaction();
+    console.log('ROLLBACK EJECUTADO');
+    throw error;
+  } finally {
+    await queryRunner.release();
+  }
+}
+
+
+
+/* =====================================================
+   HELPERS PRIVADOS
+===================================================== */
+
+private async upsertEstadoTx(
+  queryRunner,
+  id_em_p: number,
+  params: {
+    id_etapa?: number;
+    id_tema?: number;
+    id_subtema?: number;
+    estado: 'done' | 'pending' | 'none';
+  },
+) {
+  const repo = queryRunner.manager.getRepository(Calificacion);
+
+  let cal = await repo.findOne({
+    where: {
+      empresaProyecto: { id_em_p },
+      etapa: params.id_etapa ? { id_etapa: params.id_etapa } : null,
+      tema: params.id_tema ? { id_tema: params.id_tema } : null,
+      subtema: params.id_subtema
+        ? { id_subtema: params.id_subtema }
+        : null,
+    },
+  });
+
+  if (!cal) {
+    cal = repo.create({
+      estado: params.estado,
+      empresaProyecto: { id_em_p },
+      etapa: params.id_etapa ? { id_etapa: params.id_etapa } : null,
+      tema: params.id_tema ? { id_tema: params.id_tema } : null,
+      subtema: params.id_subtema
+        ? { id_subtema: params.id_subtema }
+        : null,
+    });
+  } else {
+    cal.estado = params.estado;
   }
 
-  async getProyectosByEmpresa(id: number): Promise<Proyecto[]> {
-    try {
-      console.log('[SERVICE] getProyectosByEmpresa activado con idEmpresa:', id);
-      const proyectos = await this.proyectoRepo.find({
-        where: { empresas: { id_empresa: id } },
-        relations: ['empresas'],
+  await repo.save(cal);
+}
+
+
+private async recalcularEstadosTx(
+  queryRunner,
+  id_em_p: number,
+  id_subtema?: number,
+  id_tema?: number,
+  id_etapa?: number,
+) {
+  const calRepo = queryRunner.manager.getRepository(Calificacion);
+  const subRepo = queryRunner.manager.getRepository(SubTema);
+  const temaRepo = queryRunner.manager.getRepository(Tema);
+
+  /* =====================
+     SUBTEMA → TEMA
+  ===================== */
+  if (id_subtema) {
+    const subtema = await subRepo.findOne({
+      where: { id_subtema },
+      relations: ['tema'],
+    });
+
+    if (!subtema) return;
+
+    id_tema = subtema.tema.id_tema;
+  }
+
+  /* =====================
+     TEMA → ETAPA
+  ===================== */
+  if (id_tema) {
+    const subtemas = await subRepo.find({
+      where: { tema: { id_tema } },
+    });
+
+    if (subtemas.length > 0) {
+      const estados = await calRepo.find({
+        where: {
+          empresaProyecto: { id_em_p },
+          subtema: { id_subtema: In(subtemas.map(s => s.id_subtema)) },
+        },
+        relations: ['subtema'],
       });
-      console.log('[SERVICE] getProyectosByEmpresa resultado:', proyectos);
-      return proyectos;
-    } catch (error) {
-      console.error('[SERVICE] getProyectosByEmpresa error:', error);
-      throw new InternalServerErrorException('Error al obtener proyectos por empresa');
-    }
-  }
 
-  async getAllProyectos(): Promise<Proyecto[]> {
-    try {
-      console.log('[SERVICE] getAllProyectos activado');
-      const proyectos = await this.proyectoRepo.find({ relations: ['empresas', 'temas'] });
-      console.log('[SERVICE] getAllProyectos resultado:', proyectos);
-      return proyectos;
-    } catch (error) {
-      console.error('[SERVICE] getAllProyectos error:', error);
-      throw new InternalServerErrorException('Error al obtener todos los proyectos');
-    }
-  }
-
-  async getProyectoById(id: number): Promise<Proyecto> {
-    try {
-      const proyecto = await this.proyectoRepo.findOne({
-        where: { id_proyecto: id },
-        relations: ['temas', 'empresas'], // opcional
-      });
-      if (!proyecto) throw new NotFoundException(`Proyecto con ID ${id} no encontrado`);
-      return proyecto;
-    } catch (error) {
-      console.error('Error al consultar proyecto:', error);
-      throw new InternalServerErrorException('Error interno al consultar proyecto');
-    }
-  }
-
-  async getTemasByProyecto(id_proyecto: number): Promise<Tema[]> {
-    try {
-      console.log('[SERVICE] getTemasByProyecto activado con idProyecto:', id_proyecto);
-
-      const proyecto = await this.proyectoRepo.findOne({
-        where: { id_proyecto },
-        relations: ['temas'],
+      const blockingSubtema = subtemas.find(st => {
+        const estado = estados.find(
+          e => e.subtema?.id_subtema === st.id_subtema,
+        );
+        return estado?.estado !== 'done';
       });
 
-      if (!proyecto) throw new NotFoundException('Proyecto no encontrado');
+      const allDone = !blockingSubtema;
 
-      console.log('[SERVICE] getTemasByProyecto resultado:', proyecto.temas);
-      return proyecto.temas;
-    } catch (error) {
-      console.error('[SERVICE] getTemasByProyecto error:', error);
-      throw new InternalServerErrorException('Error al obtener temas del proyecto');
-    }
-  }
-
-  async getTemasByEmpresaProyecto(
-    id_empresa: number,
-    id_proyecto: number
-  ): Promise<{ id_tema: number; nombre_tema: string; descripcion: string; estado: string }[]> {
-    try {
-      console.log('[SERVICE] getTemasByEmpresaProyecto activado con empresa:', id_empresa, 'proyecto:', id_proyecto);
-      const registros = await this.EmpresaProyectoTemaRepo.find({
-        where: { empresa: { id_empresa }, proyecto: { id_proyecto } },
-        relations: ['tema'],
-      });
-      const resultado = registros.map(r => ({
-        id_tema: r.tema.id_tema,
-        nombre_tema: r.tema.nombre_tema,
-        descripcion: r.tema.descripcion,
-        estado: r.estado,
-      }));
-      console.log('[SERVICE] getTemasByEmpresaProyecto resultado:', resultado);
-      return resultado;
-    } catch (error) {
-      console.error('[SERVICE] getTemasByEmpresaProyecto error:', error);
-      throw new InternalServerErrorException('Error al obtener temas con estado por empresa');
-    }
-  }
-
-  async createEmpresa(dto: { nombre: string }): Promise<{ success: boolean }> {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-    try {
-      console.log('[SERVICE] createEmpresa activado con dto:', dto);
-      const empresa = queryRunner.manager.create(Empresa, { nombre: dto.nombre });
-      await queryRunner.manager.save(empresa);
-      await queryRunner.commitTransaction(); // 👈 confirmamos la transacción
-      console.log('[SERVICE] createEmpresa creada:', empresa);
-      return { success: true };
-    } catch (error) {
-      await queryRunner.rollbackTransaction(); // 👈 revertimos cambios si falla
-      console.error('[SERVICE] createEmpresa error, rollback ejecutado:', error);
-      throw new InternalServerErrorException('Error al registrar empresa');
-    } finally {
-      await queryRunner.release(); // 👈 liberamos el queryRunner
-    }
-  }
-
-  async createProyecto(dto: { nombre_proyecto: string }): Promise<{ success: boolean; id_proyecto: number }> {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-    try {
-      console.log('[SERVICE] createProyecto activado con dto:', dto);
-      const proyecto = queryRunner.manager.create(Proyecto, { nombre_proyecto: dto.nombre_proyecto });
-      await queryRunner.manager.save(proyecto);
-      await queryRunner.commitTransaction(); // 👈 confirmamos la transacción
-      console.log('[SERVICE] createProyecto creado:', proyecto);
-      return { success: true, id_proyecto: proyecto.id_proyecto };
-    } catch (error) {
-      await queryRunner.rollbackTransaction(); // 👈 revertimos cambios si falla
-      console.error('[SERVICE] createProyecto error, rollback ejecutado:', error);
-      throw new InternalServerErrorException('Error al crear proyecto');
-    } finally {
-      await queryRunner.release(); // 👈 liberamos el queryRunner
-    }
-  }
-
-  async createTema(dto: { nombre_tema: string; id_proyecto: number }): Promise<{ success: boolean }> {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-    try {
-      console.log('[SERVICE] createTema activado con dto:', dto);
-      const proyecto = await queryRunner.manager.findOne(Proyecto, { where: { id_proyecto: dto.id_proyecto } });
-      if (!proyecto) throw new NotFoundException('Proyecto no encontrado');
-      const tema = queryRunner.manager.create(Tema, { nombre_tema: dto.nombre_tema, proyecto });
-      await queryRunner.manager.save(tema);
-      await queryRunner.commitTransaction(); // 👈 confirmamos la transacción
-      console.log('[SERVICE] createTema creado:', tema);
-      return { success: true };
-    } catch (error) {
-      await queryRunner.rollbackTransaction(); // 👈 revertimos cambios si falla
-      console.error('[SERVICE] createTema error, rollback ejecutado:', error);
-      throw new InternalServerErrorException('Error al crear tema');
-    } finally {
-      await queryRunner.release(); // 👈 liberamos el queryRunner
-    }
-  }
-
-  async addProyectoToEmpresa(id_empresa: number, id_proyecto: number): Promise<{ success: boolean }> {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-    try {
-      console.log('[SERVICE] addProyectoToEmpresa activado con idEmpresa:', id_empresa, 'idProyecto:', id_proyecto);
-      const empresa = await queryRunner.manager.findOne(Empresa, { where: { id_empresa } });
-      if (!empresa) throw new NotFoundException('Empresa no encontrada');
-      const proyecto = await queryRunner.manager.findOne(Proyecto, { where: { id_proyecto }, relations: ['temas'] });
-      if (!proyecto) throw new NotFoundException('Proyecto no encontrado');
-
-      // Crear relación empresa-proyecto
-      const relacion = queryRunner.manager.create(EmpresaProyecto, { empresa, proyecto, id_empresa, id_proyecto });
-      await queryRunner.manager.save(relacion);
-
-      // Inicializar estados en empresa_proyecto_tema
-      for (const tema of proyecto.temas) {
-        const registro = queryRunner.manager.create(EmpresaProyectoTema, {
-          empresa,
-          proyecto,
-          tema,
-          estado: 'sin registro',
-        });
-        await queryRunner.manager.save(registro);
+      if (allDone) {
+        console.log(`✅ Tema ${id_tema} pasó a DONE`);
+      } else {
+        console.log(
+          `❌ Tema ${id_tema} NO pudo pasar a DONE. Subtema ${blockingSubtema.id_subtema} está en estado distinto de done`,
+        );
       }
 
-      await queryRunner.commitTransaction(); // 👈 confirmamos la transacción
-      console.log('[SERVICE] addProyectoToEmpresa actualizado con inicialización de temas');
-      return { success: true };
-    } catch (error) {
-      await queryRunner.rollbackTransaction(); // 👈 revertimos cambios si falla
-      console.error('[SERVICE] addProyectoToEmpresa error, rollback ejecutado:', error);
-      throw new InternalServerErrorException('Error al agregar proyecto a empresa');
-    } finally {
-      await queryRunner.release(); // 👈 liberamos el queryRunner
-    }
-  }
-
-  async createTemaEnEmpresaProyecto(
-    id_empresa: number,
-    id_proyecto: number,
-    dto: { nombre_tema: string }
-  ): Promise<{ success: boolean }> {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    try {
-      console.log('[SERVICE] createTemaEnEmpresaProyecto activado con empresa:', id_empresa, 'proyecto:', id_proyecto, 'dto:', dto);
-
-      // Verificar que la empresa existe
-      const empresa = await queryRunner.manager.findOne(Empresa, { where: { id_empresa } });
-      if (!empresa) throw new NotFoundException('Empresa no encontrada');
-
-      // Verificar que el proyecto existe
-      const proyecto = await queryRunner.manager.findOne(Proyecto, { where: { id_proyecto } });
-      if (!proyecto) throw new NotFoundException('Proyecto no encontrado');
-
-      // Crear el nuevo tema asociado al proyecto
-      const tema = queryRunner.manager.create(Tema, { nombre_tema: dto.nombre_tema, proyecto });
-      await queryRunner.manager.save(tema);
-
-      // Crear la relación empresa-proyecto-tema con estado inicial
-      const relacion = queryRunner.manager.create(EmpresaProyectoTema, {
-        empresa,
-        proyecto,
-        tema,
-        estado: 'sin registro',
+      await this.upsertEstadoTx(queryRunner, id_em_p, {
+        id_tema,
+        estado: allDone ? 'done' : 'pending',
       });
-      await queryRunner.manager.save(relacion);
+    }
 
-      await queryRunner.commitTransaction(); // 👈 confirmamos la transacción
-      console.log('[SERVICE] createTemaEnEmpresaProyecto creado y asociado:', tema, relacion);
+    const tema = await temaRepo.findOne({
+      where: { id_tema },
+      relations: ['etapa'],
+    });
 
-      return { success: true };
-    } catch (error) {
-      await queryRunner.rollbackTransaction(); // 👈 revertimos cambios si falla
-      console.error('[SERVICE] createTemaEnEmpresaProyecto error, rollback ejecutado:', error);
-      throw new InternalServerErrorException('Error al crear tema en empresa-proyecto');
-    } finally {
-      await queryRunner.release(); // 👈 liberamos el queryRunner
+    if (tema) {
+      id_etapa = tema.etapa.id_etapa;
     }
   }
 
-   async updateTemaEstado(
-    id_empresa: number,
-    id_proyecto: number,
-    id_tema: number,
-    dto: { estado: 'realizado' | 'sin registro' | 'en proceso' }
-  ): Promise<{ success: boolean }> {
-    console.log('[SERVICE] updateTemaEstado activado con empresa:', id_empresa, 'proyecto:', id_proyecto, 'tema:', id_tema, 'dto:', dto);
+  /* =====================
+     ETAPA FINAL
+  ===================== */
+  if (id_etapa) {
+    const temas = await temaRepo.find({
+      where: { etapa: { id_etapa } },
+    });
 
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    try {
-      const relacion = await queryRunner.manager.findOne(EmpresaProyectoTema, {
+    if (temas.length > 0) {
+      const estados = await calRepo.find({
         where: {
-          empresa: { id_empresa },
-          proyecto: { id_proyecto },
-          tema: { id_tema },
+          empresaProyecto: { id_em_p },
+          tema: { id_tema: In(temas.map(t => t.id_tema)) },
         },
-        relations: ['empresa', 'proyecto', 'tema'],
+        relations: ['tema'],
       });
 
-      if (!relacion) throw new NotFoundException('Relación empresa-proyecto-tema no encontrada');
+      const blockingTema = temas.find(t => {
+        const estadoTema = estados.find(
+          e => e.tema?.id_tema === t.id_tema,
+        );
+        return estadoTema?.estado !== 'done';
+      });
 
-      relacion.estado = dto.estado;
-      await queryRunner.manager.save(relacion);
+      const allDone = !blockingTema;
 
-      await queryRunner.commitTransaction(); // 👈 confirmamos la transacción
-      console.log('[SERVICE] updateTemaEstado actualizado:', relacion);
+      if (allDone) {
+        console.log(`✅ Etapa ${id_etapa} pasó a DONE`);
+      } else {
+        console.log(
+          `❌ Etapa ${id_etapa} NO pudo pasar a DONE. Tema ${blockingTema.id_tema} está en estado distinto de done`,
+        );
+      }
 
-      return { success: true };
-    } catch (error) {
-      await queryRunner.rollbackTransaction(); // 👈 revertimos cambios si falla
-      console.error('[SERVICE] updateTemaEstado error, rollback ejecutado:', error);
-      throw new InternalServerErrorException('Error al actualizar estado del tema');
-    } finally {
-      await queryRunner.release(); // 👈 liberamos el queryRunner
+      await this.upsertEstadoTx(queryRunner, id_em_p, {
+        id_etapa,
+        estado: allDone ? 'done' : 'pending',
+      });
     }
   }
+}
+
+
+
+
+/* =====================================================
+   ARBOL COMPLETO OPTIMIZADO
+===================================================== */
+
+async getArbolCompletoConEstados(id_empresa: number, id_proyecto: number) {
+  const empresaProyecto = await this.empresaProyectoRepo.findOne({
+    where: {
+      empresa: { id_empresa },
+      proyecto: { id_proyecto },
+    },
+  });
+
+  if (!empresaProyecto)
+    throw new NotFoundException('Empresa-Proyecto no encontrado');
+
+  return this.proyectoRepo
+    .createQueryBuilder('proyecto')
+    .leftJoinAndSelect('proyecto.etapas', 'etapa')
+    .leftJoinAndSelect('etapa.temas', 'tema')
+    .leftJoinAndSelect('tema.subtemas', 'subtema')
+    .leftJoinAndMapOne(
+      'tema.calificacion',
+      Calificacion,
+      'calTema',
+      'calTema.id_tema = tema.id_tema AND calTema.id_em_p = :id_em_p',
+      { id_em_p: empresaProyecto.id_em_p },
+    )
+    .leftJoinAndMapOne(
+      'subtema.calificacion',
+      Calificacion,
+      'calSub',
+      'calSub.id_subtema = subtema.id_subtema AND calSub.id_em_p = :id_em_p',
+      { id_em_p: empresaProyecto.id_em_p },
+    )
+    .where('proyecto.id_proyecto = :id_proyecto', { id_proyecto })
+    .getOne();
+}
 }

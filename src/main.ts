@@ -12,7 +12,7 @@ async function bootstrap() {
       'http://localhost:3009',
       'http://192.168.19.106:4200',
       'http://192.168.19.114:4200',
-      'http://192.168.19.116:4200',
+      'http://192.168.19.103:4200',
       'https://ndlh927t-4200.use2.devtunnels.ms'
     ],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',

@@ -1,110 +1,183 @@
-import { Body, Controller, Get, Post, Patch, Param, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Param,
+  Query,
+  UseGuards,
+  ParseIntPipe,
+} from '@nestjs/common';
+
 import { ProjectsService } from './projects.service';
-import { Empresa, Tema, Proyecto } from './entities/project.entity';
+import { Empresa, Proyecto, Tema } from './entities/project.entity';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('projects')
+@UseGuards(JwtAuthGuard)
 export class ProjectsController {
   constructor(private readonly projectsService: ProjectsService) {}
 
-  // Obtener todas las empresas
-  @UseGuards(JwtAuthGuard)
+  /* =====================================================
+     EMPRESAS
+  ===================================================== */
+
   @Get('empresas')
   async getEmpresas(): Promise<Empresa[]> {
     return this.projectsService.getEmpresas();
   }
 
-  // Obtener proyectos por empresa
-  @UseGuards(JwtAuthGuard)
-  @Get('empresas/:idEmpresa/proyectos')
-  async getProyectosByEmpresa(@Param('idEmpresa') id: number): Promise<Proyecto[]> {
-    return this.projectsService.getProyectosByEmpresa(id);
+  @Post('registrar-empresa')
+  async postRegistrarEmpresa(
+    @Body() dto: { nombre: string },
+  ): Promise<{ success: boolean }> {
+    return this.projectsService.createEmpresa(dto);
   }
 
-  // Obtener todos los proyectos existentes
-  @UseGuards(JwtAuthGuard)
+  /* =====================================================
+     PROYECTOS
+  ===================================================== */
+
   @Get('proyectos')
   async getAllProyectos(): Promise<Proyecto[]> {
     return this.projectsService.getAllProyectos();
   }
 
-
-  // Obtener un proyecto por ID
-  @UseGuards(JwtAuthGuard)
   @Get('proyectos/:idProyecto')
-  async getProyectoById(@Param('idProyecto') id: number): Promise<Proyecto> {
+  async getProyectoById(
+    @Param('idProyecto', ParseIntPipe) id: number,
+  ): Promise<Proyecto> {
     return this.projectsService.getProyectoById(id);
   }
 
-
-  // Obtener temas de un proyecto sin importar empresa
-  @UseGuards(JwtAuthGuard)
-  @Get('proyectos/:idProyecto/temas')
-  async getTemasByProyecto(@Param('idProyecto') id_proyecto: number): Promise<Tema[]> {
-    return this.projectsService.getTemasByProyecto(id_proyecto);
-  }
-
-  // Obtener temas por proyecto
-  @UseGuards(JwtAuthGuard)
-  @Get('empresas/:idEmpresa/proyectos/:idProyecto/temas')
-  async getTemasByEmpresaProyecto(
-    @Param('idEmpresa') id_empresa: number,
-    @Param('idProyecto') id_proyecto: number,
-  ): Promise<any[]> {
-    return this.projectsService.getTemasByEmpresaProyecto(id_empresa, id_proyecto);
-  }
-
-  // Registrar empresa
-  @UseGuards(JwtAuthGuard)
-  @Post('registrar-empresa')
-  async postRegistrarEmpresa(@Body() dto: { nombre: string }): Promise<{ success: boolean }> {
-    return this.projectsService.createEmpresa(dto);
-  }
-
-  // Crear proyecto independiente
-  @UseGuards(JwtAuthGuard)
   @Post('crear-proyecto')
-  async postCrearProyecto(@Body() dto: { nombre_proyecto: string }): Promise<{ success: boolean }> {
+  async postCrearProyecto(
+    @Body() dto: { nombre: string },
+  ): Promise<{ success: boolean; id_proyecto: number }> {
     return this.projectsService.createProyecto(dto);
   }
 
-  // Crear tema dependiente de proyecto
-  @UseGuards(JwtAuthGuard)
+ /* @Get('empresas/:idEmpresa/proyectos')
+  async getProyectosByEmpresa(
+    @Param('idEmpresa', ParseIntPipe) id: number,
+  ): Promise<Proyecto[]> {
+    return this.projectsService.getProyectosByEmpresa(id);
+  }*/
+
+  @Post('empresas/:idEmpresa/agregar-proyecto/:idProyecto')
+  async postAgregarProyectoToEmpresa(
+    @Param('idEmpresa', ParseIntPipe) id_empresa: number,
+    @Param('idProyecto', ParseIntPipe) id_proyecto: number,
+  ): Promise<{ success: boolean }> {
+    return this.projectsService.addProyectoToEmpresa(
+      id_empresa,
+      id_proyecto,
+    );
+  }
+
+  /* =====================================================
+     ETAPAS
+  ===================================================== */
+  @Get('proyectos/:idProyecto/etapas')
+async getEtapasByProyecto(
+  @Param('idProyecto', ParseIntPipe) id_proyecto: number,
+  @Query('id_empresa', ParseIntPipe) id_empresa: number,
+) {
+  return this.projectsService.getEtapasByProyecto(
+    id_proyecto,
+    id_empresa,
+  );
+}
+
+
+
+  @Post('crear-etapa')
+  async postCrearEtapa(
+    @Body() dto: { nombre: string; id_proyecto: number },
+  ): Promise<{ success: boolean }> {
+    return this.projectsService.createEtapa(dto);
+  }
+
+  /* =====================================================
+     TEMAS
+  ===================================================== */
+
+  @Get('etapas/:idEtapa/temas')
+async getTemasByEtapa(
+  @Param('idEtapa', ParseIntPipe) id_etapa: number,
+  @Query('id_empresa', ParseIntPipe) id_empresa: number,
+  @Query('id_proyecto', ParseIntPipe) id_proyecto: number,
+) {
+  return this.projectsService.getTemasByEtapa(
+    id_etapa,
+    id_empresa,
+    id_proyecto,
+  );
+}
+
+
   @Post('crear-tema')
-  async postCrearTema(@Body() dto: { nombre_tema: string; id_proyecto: number }): Promise<{ success: boolean }> {
+  async postCrearTema(
+    @Body()
+    dto: {
+      nombre: string;
+      id_proyecto: number;
+      id_etapa: number;
+    },
+  ): Promise<{ success: boolean }> {
     return this.projectsService.createTema(dto);
   }
 
-  // Agregar proyecto a empresa (ManyToMany)
-  @UseGuards(JwtAuthGuard)
-  @Post('empresas/:idEmpresa/agregar-proyecto/:idProyecto')
-  async postAgregarProyectoToEmpresa(
-    @Param('idEmpresa') id_empresa: number,
-    @Param('idProyecto') id_proyecto: number,
+
+
+    /* =====================================================
+     SUBTEMAS
+  ===================================================== */
+
+@Get('temas/:idTema/subtemas')
+async getSubtemasByTema(
+  @Param('idTema', ParseIntPipe) id_tema: number,
+  @Query('id_empresa', ParseIntPipe) id_empresa: number,
+  @Query('id_proyecto', ParseIntPipe) id_proyecto: number,
+) {
+  return this.projectsService.getSubtemasByTema(
+    id_tema,
+    id_empresa,
+    id_proyecto,
+  );
+}
+
+
+  @Post('crear-subtema')
+  async postCrearSubtema(
+    @Body()
+    dto: {
+      nombre: string;
+      id_tema: number;
+    },
   ): Promise<{ success: boolean }> {
-    return this.projectsService.addProyectoToEmpresa(id_empresa, id_proyecto);
+    return this.projectsService.createSubtema(dto);
   }
 
-  // Actualizar estado de tema
-  // Actualizar estado de tema por empresa y proyecto
-  @UseGuards(JwtAuthGuard)
-  @Patch('empresas/:idEmpresa/proyectos/:idProyecto/temas/:idTema')
-  async patchUpdateTemaEstado(
-    @Param('idEmpresa') id_empresa: number,
-    @Param('idProyecto') id_proyecto: number,
-    @Param('idTema') id_tema: number,
-    @Body() dto: { estado: 'realizado' | 'sin registro' | 'en proceso' },
-  ): Promise<{ success: boolean }> {
-    return this.projectsService.updateTemaEstado(id_empresa, id_proyecto, id_tema, dto);
+
+  /* =====================================================
+     ACTUALIZAR ESTADO (CALIFICACION)
+  ===================================================== */
+
+  @Patch('actualizar-estado')
+  async patchUpdateEstado(
+    @Body()
+    dto: {
+      id_empresa: number;
+      id_proyecto: number;
+      id_etapa?: number;
+      id_tema?: number;
+      id_subtema?: number;
+      estado: 'done' | 'pending' | 'none';
+    },
+  ) {
+    return this.projectsService.updateEstadoGeneral(dto);
   }
-    // Crear y asociar un nuevo tema a un proyecto ya unido a una empresa
-  @UseGuards(JwtAuthGuard)
-  @Post('empresas/:idEmpresa/proyectos/:idProyecto/temas')
-  async postCrearTemaEnEmpresaProyecto(
-    @Param('idEmpresa') id_empresa: number,
-    @Param('idProyecto') id_proyecto: number,
-    @Body() dto: { nombre_tema: string },
-  ): Promise<{ success: boolean }> {
-    return this.projectsService.createTemaEnEmpresaProyecto(id_empresa, id_proyecto, dto);
-  }
+
 }

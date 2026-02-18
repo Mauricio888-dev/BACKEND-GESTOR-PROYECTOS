@@ -17,6 +17,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
         password: config.get<string>('DB_PASS', 'password'),
         database: config.get<string>('DB_NAME', 'gestor_proyectos'),
         autoLoadEntities: true,
+        //logging: true,
         synchronize: true, // ⚠️ solo en desarrollo
       }),
     }),

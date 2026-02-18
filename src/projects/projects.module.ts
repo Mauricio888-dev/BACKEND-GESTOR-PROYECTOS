@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProjectsController } from './projects.controller';
-import { Empresa, Tema, Proyecto, Usuario, EmpresaProyectoTema, EmpresaProyecto } from './entities/project.entity';
+import { Empresa, Tema, Proyecto, Usuario, EmpresaProyecto, Etapa, SubTema, Calificacion } from './entities/project.entity';
 
 import { ProjectsService } from './projects.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Empresa, Proyecto, Tema, Usuario, EmpresaProyectoTema, EmpresaProyecto])],
+  imports: [TypeOrmModule.forFeature([Empresa, Proyecto, Tema, Usuario, EmpresaProyecto, Etapa, SubTema, Calificacion])],
   controllers: [ProjectsController],
   providers: [ProjectsService], // 👈 aquí registras tu servicio/repositorio
   //exports: [ProjectsService],   // si lo necesitas en otros módulos
