@@ -11,6 +11,87 @@ import {
   Unique
 } from 'typeorm';
 
+
+/* =========================
+   PLANTILLAS
+   ========================= */
+@Entity('plantillas')
+export class Plantilla {
+  @PrimaryGeneratedColumn({ name: 'id_plantilla', type: 'int' })
+  id_plantilla: number;
+
+  @Column({ type: 'varchar', length: 100 })
+  nombre: string;
+
+  @Column({ type: 'varchar', length: 100 })
+  categoria: string;
+
+  @OneToMany(() => PlantillaEtapa, etapa => etapa.plantilla)
+  etapas: PlantillaEtapa[];
+}
+
+/* =========================
+   PLANTILLA_ETAPAS
+   ========================= */
+@Entity('plantilla_etapas')
+export class PlantillaEtapa {
+  @PrimaryGeneratedColumn({ name: 'id_plantilla_etapa', type: 'int' })
+  id_plantilla_etapa: number;
+
+  @Column({ type: 'varchar', length: 100 })
+  nombre: string;
+
+  @Column({ type: 'int' })
+  orden: number;
+
+  @ManyToOne(() => Plantilla, plantilla => plantilla.etapas, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'id_plantilla' })
+  plantilla: Plantilla;
+
+  @OneToMany(() => PlantillaTema, tema => tema.etapa)
+  temas: PlantillaTema[];
+}
+
+/* =========================
+   PLANTILLA_TEMAS
+   ========================= */
+@Entity('plantilla_temas')
+export class PlantillaTema {
+  @PrimaryGeneratedColumn({ name: 'id_plantilla_tema', type: 'int' })
+  id_plantilla_tema: number;
+
+  @Column({ type: 'varchar', length: 100 })
+  nombre: string;
+
+  @Column({ type: 'int' })
+  orden: number;
+
+  @ManyToOne(() => PlantillaEtapa, etapa => etapa.temas, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'id_plantilla_etapa' })
+  etapa: PlantillaEtapa;
+
+  @OneToMany(() => PlantillaSubTema, subtema => subtema.tema)
+  subtemas: PlantillaSubTema[];
+}
+
+/* =========================
+   PLANTILLA_SUB_TEMAS
+   ========================= */
+@Entity('plantilla_subtemas')
+export class PlantillaSubTema {
+  @PrimaryGeneratedColumn({ name: 'id_plantilla_subtema', type: 'int' })
+  id_plantilla_subtema: number;
+
+  @Column({ type: 'varchar', length: 100 })
+  nombre: string;
+
+  @Column({ type: 'int' })
+  orden: number;
+
+  @ManyToOne(() => PlantillaTema, tema => tema.subtemas, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'id_plantilla_tema' })
+  tema: PlantillaTema;
+}
 /* =========================
    EMPRESAS
    ========================= */
@@ -40,11 +121,15 @@ export class Proyecto {
   @Column({ type: 'varchar', length: 100 })
   nombre: string;
 
+  @Column()
+  categoria?: string;
+
   @OneToMany(() => EmpresaProyecto, ep => ep.proyecto)
   empresaProyectos: EmpresaProyecto[];
 
   @OneToMany(() => Etapa, etapa => etapa.proyecto)
   etapas: Etapa[];
+
 }
 
 

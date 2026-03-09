@@ -22,7 +22,12 @@ import {
   SubTema,
   Usuario,
   EmpresaProyecto,
-  Calificacion,
+  Calificacion, 
+  Plantilla, 
+  PlantillaEtapa, 
+  PlantillaTema, 
+  PlantillaSubTema,
+
 } from './entities/project.entity';
 
 @Injectable()
@@ -53,9 +58,21 @@ export class ProjectsService {
     @InjectRepository(Usuario)
     private readonly userRepo: Repository<Usuario>,
 
+    @InjectRepository(Plantilla)
+    private readonly plantillaRepo: Repository<Plantilla>, 
+    
+    @InjectRepository(PlantillaEtapa)
+    private readonly plantillaEtapaRepo: Repository<PlantillaEtapa>,
+     
+    @InjectRepository(PlantillaTema)
+    private readonly plantillaTemaRepo: Repository<PlantillaTema>, 
+    
+    @InjectRepository(PlantillaSubTema)
+    private readonly plantillaSubTemaRepo: Repository<PlantillaSubTema>,
+    
     private readonly dataSource: DataSource,
 
-
+    
   ) {}
 
   /* =====================================================
@@ -115,10 +132,65 @@ async getProyectoById(id: number): Promise<any> {
   return proyecto;
 }
 
-async createProyecto(dto: { nombre: string }) {
-  const proyecto = this.proyectoRepo.create(dto);
-  await this.proyectoRepo.save(proyecto);
-  return { success: true, id_proyecto: proyecto.id_proyecto };
+async createProyecto(dto: { nombre: string; categoria?: string }) {
+  return this.dataSource.transaction(async manager => {
+    try {
+      // 1. Crear el proyecto con nombre y categoría (si existe)
+      const proyecto = manager.create(Proyecto, { 
+        nombre: dto.nombre,
+        categoria: dto.categoria ?? undefined, // guardamos la categoría si viene
+      });
+      await manager.save(proyecto);
+
+      // 2. Si no hay categoría, solo retorna el proyecto
+      if (!dto.categoria) {
+        return { success: true, id_proyecto: proyecto.id_proyecto };
+      }
+
+      // 3. Buscar la plantilla por categoría
+      const plantilla = await this.plantillaRepo.findOne({
+        where: { categoria: dto.categoria },
+        relations: ['etapas', 'etapas.temas', 'etapas.temas.subtemas'],
+      });
+
+      if (!plantilla) {
+        throw new Error(`No existe plantilla para la categoría: ${dto.categoria}`);
+      }
+
+      // 4. Clonar la jerarquía de la plantilla hacia el proyecto
+      for (const etapa of plantilla.etapas) {
+        const nuevaEtapa = manager.create(Etapa, {
+          nombre: etapa.nombre,
+          proyecto: proyecto,
+        });
+        await manager.save(nuevaEtapa);
+
+        for (const tema of etapa.temas) {
+          const nuevoTema = manager.create(Tema, {
+            nombre: tema.nombre,
+            etapa: nuevaEtapa,
+          });
+          await manager.save(nuevoTema);
+
+          for (const subtema of tema.subtemas) {
+            const nuevoSubtema = manager.create(SubTema, {
+              nombre: subtema.nombre,
+              tema: nuevoTema,
+            });
+            await manager.save(nuevoSubtema);
+          }
+        }
+      }
+
+      // 5. Retornar éxito
+      return { success: true, id_proyecto: proyecto.id_proyecto };
+
+    } catch (error) {
+      // Rollback automático por la transacción
+      console.error('Error creando proyecto con plantilla:', error);
+      throw new Error('No se pudo crear el proyecto, se hizo rollback.');
+    }
+  });
 }
 
 async getProyectosByEmpresa(id_empresa: number) {
@@ -150,8 +222,12 @@ async addProyectoToEmpresa(id_empresa: number, id_proyecto: number) {
   const relacion = this.empresaProyectoRepo.create({ empresa, proyecto });
   await this.empresaProyectoRepo.save(relacion);
 
+  // 🔥 Inicializar calificaciones
+  await this.inicializarCalificaciones(relacion.id_em_p, id_proyecto);
+
   return { success: true };
 }
+
 
 /* =====================================================
    ETAPAS
@@ -206,8 +282,25 @@ async createEtapa(dto: { nombre: string; id_proyecto: number }) {
   });
 
   await this.etapaRepo.save(etapa);
+
+  // 🔥 Crear calificaciones para empresas existentes
+  const relaciones = await this.empresaProyectoRepo.find({
+    where: { proyecto: { id_proyecto: dto.id_proyecto } },
+  });
+
+  const nuevasCalificaciones = relaciones.map(rel =>
+    this.calificacionRepo.create({
+      estado: 'none',
+      empresaProyecto: { id_em_p: rel.id_em_p },
+      etapa: { id_etapa: etapa.id_etapa },
+    }),
+  );
+
+  await this.calificacionRepo.save(nuevasCalificaciones);
+
   return { success: true };
 }
+
 
 /* =====================================================
    TEMAS
@@ -260,6 +353,21 @@ async createTema(dto: {
   });
 
   await this.temaRepo.save(tema);
+  
+  const relaciones = await this.empresaProyectoRepo.find({
+    where: { proyecto: { id_proyecto: dto.id_proyecto } },
+  });
+
+  const nuevasCalificaciones = relaciones.map(rel =>
+    this.calificacionRepo.create({
+      estado: 'none',
+      empresaProyecto: { id_em_p: rel.id_em_p },
+      tema: { id_tema: tema.id_tema },
+    }),
+  );
+
+  await this.calificacionRepo.save(nuevasCalificaciones);
+
   return { success: true };
 }
 
@@ -306,6 +414,7 @@ async getSubtemasByTema(
 async createSubtema(dto: { nombre: string; id_tema: number }) {
   const tema = await this.temaRepo.findOne({
     where: { id_tema: dto.id_tema },
+    relations: ['etapa', 'etapa.proyecto'],
   });
 
   if (!tema)
@@ -317,6 +426,30 @@ async createSubtema(dto: { nombre: string; id_tema: number }) {
   });
 
   await this.SubTemaRepo.save(subtema);
+
+  // 🔥 Obtener todas las empresas que tienen este proyecto
+  const relaciones = await this.empresaProyectoRepo.find({
+    where: {
+      proyecto: { id_proyecto: tema.etapa.proyecto.id_proyecto },
+    },
+  });
+
+  if (relaciones.length > 0) {
+    const nuevasCalificaciones = relaciones.map(rel =>
+      this.calificacionRepo.create({
+        estado: 'none',
+        empresaProyecto: { id_em_p: rel.id_em_p },
+        subtema: { id_subtema: subtema.id_subtema },
+      }),
+    );
+
+    await this.calificacionRepo.save(nuevasCalificaciones);
+
+    console.log(
+      `✅ Subtema ${subtema.id_subtema} creado con ${nuevasCalificaciones.length} calificaciones en NONE`,
+    );
+  }
+
   return { success: true };
 }
 
@@ -541,12 +674,57 @@ private async recalcularEstadosTx(
   }
 }
 
+private async inicializarCalificaciones(id_em_p: number, id_proyecto: number) {
+  const etapas = await this.etapaRepo.find({
+    where: { proyecto: { id_proyecto } },
+    relations: ['temas', 'temas.subtemas'],
+  });
+
+  const calificaciones: Calificacion[] = [];
+
+  for (const etapa of etapas) {
+    // Etapa
+    calificaciones.push(
+      this.calificacionRepo.create({
+        estado: 'none',
+        empresaProyecto: { id_em_p },
+        etapa: { id_etapa: etapa.id_etapa },
+      }),
+    );
+
+    for (const tema of etapa.temas) {
+      // Tema
+      calificaciones.push(
+        this.calificacionRepo.create({
+          estado: 'none',
+          empresaProyecto: { id_em_p },
+          tema: { id_tema: tema.id_tema },
+        }),
+      );
+
+      for (const subtema of tema.subtemas) {
+        // Subtema
+        calificaciones.push(
+          this.calificacionRepo.create({
+            estado: 'none',
+            empresaProyecto: { id_em_p },
+            subtema: { id_subtema: subtema.id_subtema },
+          }),
+        );
+      }
+    }
+  }
+
+  await this.calificacionRepo.save(calificaciones);
+
+  console.log(`✅ Inicializadas ${calificaciones.length} calificaciones en estado NONE`);
+}
 
 
 
 /* =====================================================
    ARBOL COMPLETO OPTIMIZADO
-===================================================== */
+===================================================== 
 
 async getArbolCompletoConEstados(id_empresa: number, id_proyecto: number) {
   const empresaProyecto = await this.empresaProyectoRepo.findOne({
@@ -580,5 +758,5 @@ async getArbolCompletoConEstados(id_empresa: number, id_proyecto: number) {
     )
     .where('proyecto.id_proyecto = :id_proyecto', { id_proyecto })
     .getOne();
-}
+}*/
 }

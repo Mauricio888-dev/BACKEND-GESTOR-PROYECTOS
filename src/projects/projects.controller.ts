@@ -51,12 +51,21 @@ export class ProjectsController {
     return this.projectsService.getProyectoById(id);
   }
 
-  @Post('crear-proyecto')
+  /*@Post('crear-proyecto')
   async postCrearProyecto(
     @Body() dto: { nombre: string },
   ): Promise<{ success: boolean; id_proyecto: number }> {
     return this.projectsService.createProyecto(dto);
+  }*/
+
+
+  @Post('crear-proyecto')
+  async postCrearProyecto(
+    @Body() dto: { nombre: string; categoria: string },
+  ): Promise<{ success: boolean; id_proyecto: number }> {
+    return this.projectsService.createProyecto(dto);
   }
+
 
  /* @Get('empresas/:idEmpresa/proyectos')
   async getProyectosByEmpresa(
